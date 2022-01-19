@@ -23,8 +23,12 @@ module.exports = (io) => {
          */
         socket.on('signal', data => {
             console.log('sending signal from ' + socket.id + ' to ', data)
-            if(!peers[data.socket_id])return
-            peers[data.socket_id].emit('signal', {
+            let peer = peers[data.socket_id];
+            if(!peer){
+                console.log(`peer ${data.socket_id} does not exist`);
+                return;
+            }
+            peer.emit('signal', {
                 socket_id: socket.id,
                 signal: data.signal
             })
@@ -37,6 +41,11 @@ module.exports = (io) => {
             console.log('socket disconnected ' + socket.id)
             socket.broadcast.emit('removePeer', socket.id)
             delete peers[socket.id]
+        })
+
+        socket.on('move', data=>{
+            console.log(`moving: ${socket.id} to: ${JSON.stringify(data)}`);
+            socket.broadcast.emit('move', {socket: socket.id, where: data});
         })
 
         /**
