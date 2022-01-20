@@ -107,9 +107,12 @@ function init() {
     socket.on("signal", (data) => {
         peers[data.socket_id].signal(data.signal);
     });
-    socket.on("move", ({socket, where})=>{
-        console.log(`got move: ${JSON.stringify(where)} for ${socket}`);
-        peers[socket].frame.move(where);
+    socket.on("setLocation", ({ socket, offset }) => {
+        let peer = peers[socket];
+        peer.frame.moveTo(offset);
+    })
+    socket.on("setOwnLocation", ({ offset }) => {
+        localFrame.moveTo(offset);
     })
 }
 
@@ -168,6 +171,7 @@ function addPeer(socket_id, am_initiator) {
         newVid.onclick = () => openPictureMode(newVid);
         newVid.ontouchstart = (e) => openPictureMode(newVid);
         videos.appendChild(newVid);
+        socket.emit('sendLocation', socket_id);
     });
 }
 
@@ -318,20 +322,19 @@ function updateButtons() {
 class VideoFrame {
     constructor(videoElement) {
         this.videoElement = videoElement;
-        this.offset = {x: 0, y: 0};
+        this.offset = { x: 0, y: 0 };
     }
-    move(where) {
-        console.log(`move(${JSON.stringify(where)})`);
-        let {x,y} = where;
-        this.offset[x] += 50 * y;
-        let z = {[x==='x'?'left':'top']:this.offset[x]};
-        console.log(`z=${JSON.stringify(z)}`);
-        this.videoElement.animate(z, 50);
+    moveTo(offset) {
+        this.offset = offset;
+        this.updateLocation();
+    }
+    updateLocation() {
+        this.videoElement.animate({ left: this.offset.x, top: this.offset.y }, 50);
     }
 }
 
 class Participant {
-    constructor(peer, frame){
+    constructor(peer, frame) {
         this.peer = peer;
         this.frame = frame;
     }
@@ -349,28 +352,23 @@ document.addEventListener("keydown", (e) => {
     const key_code = e.code || e.which || e.keyCode;
     const element = $('#localVideo');
     console.log(key_code);
-    let x, y;
+    let moveBy;
     switch (key_code) {
         case 'ArrowLeft': //left arrow key
-            x = 'x';
-            y = -1;
+            moveBy = { axis: 'x', direction: -1 };
             break;
         case 'ArrowUp': //Up arrow key
-            x = 'y';
-            y = -1;
+            moveBy = { axis: 'y', direction: -1 };
             break;
         case 'ArrowRight': //right arrow key
-            x = 'x';
-            y = 1;
+            moveBy = { axis: 'x', direction: 1 };
             break;
         case 'ArrowDown': //down arrow key
-            x = 'y';
-            y = 1;
+            moveBy = { axis: 'y', direction: 1 };
             break;
         default:
             return;
     }
-    let where = {x:x,y:y};
-    localFrame.move(where);
-    socket.emit('move', where);
+    e.preventDefault();
+    socket.emit('move', moveBy);
 });

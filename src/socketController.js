@@ -1,4 +1,18 @@
 
+class ServerParticipant {
+    constructor(peer){
+        this.peer=peer;
+        this.offset = {x: Math.random() * 1000, y: Math.random() * 1000};
+    }
+    emit(...args){
+        this.peer.emit(...args);
+    }
+    moveBy(moveBy) {
+        console.log(`moveBy(${JSON.stringify(moveBy)})`);
+        let {axis,direction} = moveBy;
+        this.offset[axis] += 50 * direction;
+    }
+}
 peers = {}
 
 
@@ -9,7 +23,7 @@ module.exports = (io) => {
 
         // Initiate the connection process as soon as the client connects
 
-        peers[socket.id] = socket
+        let thisParticipant = peers[socket.id] = new ServerParticipant(socket);
 
         // Asking all other clients to setup the peer connection receiver
         for(let id in peers) {
@@ -17,6 +31,7 @@ module.exports = (io) => {
             console.log('sending init receive to ' + socket.id)
             peers[id].emit('initReceive', socket.id)
         }
+        socket.emit('setOwnLocation', {offset: thisParticipant.offset})
 
         /**
          * relay a peerconnection signal to a specific socket
@@ -44,8 +59,13 @@ module.exports = (io) => {
         })
 
         socket.on('move', data=>{
-            console.log(`moving: ${socket.id} to: ${JSON.stringify(data)}`);
-            socket.broadcast.emit('move', {socket: socket.id, where: data});
+            console.log(`moving: ${socket.id}`);
+            let participant = peers[socket.id];
+            participant.moveBy(data);
+            let offset = {offset: participant.offset};
+            console.log(`new offset for ${socket.id}: ${JSON.stringify(offset)}`);
+            socket.emit('setOwnLocation', offset);
+            socket.broadcast.emit('setLocation', {socket: socket.id, ...offset});
         })
 
         /**
@@ -54,7 +74,11 @@ module.exports = (io) => {
          */
         socket.on('initSend', init_socket_id => {
             console.log('INIT SEND by ' + socket.id + ' for ' + init_socket_id)
-            peers[init_socket_id].emit('initSend', socket.id)
+            let peer = peers[init_socket_id];
+            peer.emit('initSend', socket.id)
+        })
+        socket.on('sendLocation',(id)=>{
+            socket.emit('setLocation', {socket: id, offset: peers[id].offset})
         })
     })
 }
